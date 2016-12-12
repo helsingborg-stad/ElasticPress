@@ -52,7 +52,7 @@ class EP_Dashboard {
 
 	/**
 	 * Output dashboard link in plugin actions
-	 * 
+	 *
 	 * @param  array $plugin_actions
 	 * @param  string $plugin_file
 	 * @since  2.1
@@ -469,22 +469,23 @@ class EP_Dashboard {
 
 				while ( $query->have_posts() ) {
 					$query->the_post();
+					$current_post_id = get_the_ID();
 					$killed_post_count = 0;
 
-					$post_args = ep_prepare_post( get_the_ID() );
+					$post_args = ep_prepare_post( $current_post_id );
 
-					if ( apply_filters( 'ep_post_sync_kill', false, $post_args, get_the_ID() ) ) {
+					if ( apply_filters( 'ep_post_sync_kill', false, $post_args, $current_post_id ) ) {
 
 						$killed_post_count++;
 
 					} else { // Post wasn't killed so process it.
 
-						$queued_posts[ get_the_ID() ][] = '{ "index": { "_id": "' . absint( get_the_ID() ) . '" } }';
+						$queued_posts[ $current_post_id ][] = '{ "index": { "_id": "' . absint( $current_post_id ) . '" } }';
 
 						if ( function_exists( 'wp_json_encode' ) ) {
-							$queued_posts[ get_the_ID() ][] = addcslashes( wp_json_encode( $post_args ), "\n" );
+							$queued_posts[ $current_post_id ][] = addcslashes( wp_json_encode( $post_args ), "\n" );
 						} else {
-							$queued_posts[ get_the_ID() ][] = addcslashes( json_encode( $post_args ), "\n" );
+							$queued_posts[ $current_post_id ][] = addcslashes( json_encode( $post_args ), "\n" );
 						}
 					}
 				}
@@ -516,7 +517,7 @@ class EP_Dashboard {
 				}
 			} else {
 				// We are done (with this site)
-				
+
 				if ( defined( 'EP_IS_NETWORK' ) && EP_IS_NETWORK ) {
 					if ( empty( $index_meta['site_stack'] ) ) {
 						delete_site_option( 'ep_index_meta' );
@@ -529,7 +530,7 @@ class EP_Dashboard {
 							$indexes[] = ep_get_index_name();
 							restore_current_blog();
 						}
-						
+
 						ep_create_network_alias( $indexes );
 					} else {
 						$index_meta['offset'] = (int) $query->found_posts;
@@ -621,7 +622,7 @@ class EP_Dashboard {
 
 	/**
 	 * Register and Enqueue JavaScripts for dashboard
-	 * 
+	 *
 	 * @since 2.2
 	 */
 	public function action_admin_enqueue_dashboard_scripts() {
@@ -654,7 +655,7 @@ class EP_Dashboard {
 				if ( ! empty( $index_meta ) ) {
 					$data['index_meta'] = $index_meta;
 				}
-				
+
 				$data['sync_complete'] = esc_html__( 'Sync complete', 'elasticpress' );
 				$data['sync_paused'] = esc_html__( 'Sync paused', 'elasticpress' );
 				$data['sync_syncing'] = esc_html__( 'Syncing', 'elasticpress' );
@@ -668,7 +669,7 @@ class EP_Dashboard {
 
 	/**
 	 * Enqueue scripts to be used across all of WP admin
-	 * 
+	 *
 	 * @since 2.2
 	 */
 	public function action_admin_enqueue_admin_scripts() {

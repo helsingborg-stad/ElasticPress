@@ -269,30 +269,20 @@ function ep_wc_translate_args( $query ) {
 		}
 	}
 
-	$post_type = $query->get( 'post_type', false );
-
-	if ( ! empty( $tax_query ) ) {
-		$query->set( 'tax_query', $tax_query );
-
-		if ( empty( $post_type ) ) {
-			$post_type = 'product';
-		} elseif ( is_array( $post_type ) ) {
-			$post_type[] = 'product';
-		} else {
-			$post_type = array( $post_type, 'product' );
-		}
-
-		$query->set( 'post_type', $post_type );
-	}
-
 	/**
 	 * Force ElasticPress if product post type query
 	 */
-	$supported_post_types = array(
-		'product',
-		'shop_order',
-		'shop_order_refund',
-		'product_variation'
+	$post_type = $query->get( 'post_type', false );
+
+	// Act only on a defined subset of all indexable post types here
+	$supported_post_types = array_intersect(
+		array(
+			'product',
+			'shop_order',
+			'shop_order_refund',
+			'product_variation'
+		),
+		ep_get_indexable_post_types()
 	);
 
 	// For orders it queries an array of shop_order and shop_order_refund post types, hence an array_diff
@@ -304,6 +294,14 @@ function ep_wc_translate_args( $query ) {
 	 * If we have a WooCommerce specific query, lets hook it to ElasticPress and make the query ElasticSearch friendly
 	 */
 	if ( $integrate ) {
+		// Set tax_query again since we may have added things
+		$query->set( 'tax_query', $tax_query );
+
+		// Default to product if no post type is set
+		if ( empty( $post_type ) ) {
+			$post_type = 'product';
+			$query->set( 'post_type', 'product' );
+		}
 
 		// Handles the WC Top Rated Widget
 		if ( has_filter( 'posts_clauses', array( WC()->query, 'order_by_rating_post_clauses' ) ) ) {
@@ -347,7 +345,7 @@ function ep_wc_translate_args( $query ) {
 		if ( ! empty( $orderby ) && 'rand' === $orderby ) {
 			$query->set( 'orderby', false ); // Just order by relevance.
 		}
-		
+
 		$s = $query->get( 's' );
 
 		$query->query_vars['ep_integrate'] = true;
@@ -470,14 +468,14 @@ function ep_wc_remove_legacy_meta( $post_args, $post_id ) {
 
 /**
  * Make search coupons don't go through ES
- * 
+ *
  * @param  bool $enabled
  * @param  object $query
  * @since  2.1
  * @return bool
  */
 function ep_wc_blacklist_coupons( $enabled, $query ) {
-	if ( 'shop_coupon' === $query->get( 'post_type' ) ) {
+	if ( method_exists( $query, 'get' ) && 'shop_coupon' === $query->get( 'post_type' ) ) {
 		return false;
 	}
 

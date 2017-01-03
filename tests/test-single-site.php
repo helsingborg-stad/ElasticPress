@@ -141,38 +141,6 @@ class EPTestSingleSite extends EP_Test_Base {
 	}
 
 	/**
-	 * Test that a post becoming unpublished correctly gets removed from the Elasticsearch index
-	 *
-	 * @since 0.9.3
-	 */
-	public function testPostUnpublish() {
-		add_action( 'ep_delete_post', array( $this, 'action_delete_post' ), 10, 0 );
-
-		$post_id = ep_create_and_sync_post();
-
-		ep_refresh_index();
-
-		$post = ep_get_post( $post_id );
-
-		// Ensure that our post made it over to elasticsearch
-		$this->assertTrue( ! empty( $post ) );
-
-		// Let's transition the post status from published to draft
-		wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ) );
-
-		ep_refresh_index();
-
-		$this->assertTrue( ! empty( $this->fired_actions['ep_delete_post'] ) );
-
-		$post = ep_get_post( $post_id );
-
-		// Alright, now the post has been removed from the index, so this should be empty
-		$this->assertTrue( empty( $post ) );
-
-		$this->fired_actions = array();
-	}
-
-	/**
 	 * Test WP Query search on post content
 	 *
 	 * @since 0.9
@@ -1052,32 +1020,6 @@ class EPTestSingleSite extends EP_Test_Base {
 	}
 
 	/**
-	 * Test a post status query for published or draft posts without 'draft' allowed as indexable status
-	 *
-	 * @since 2.1
-	 */
-	public function testPostStatusQueryMultiDefault() {
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 1', 'post_status' => 'draft' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 2' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 3', 'post_status' => 'draft' ) );
-
-		ep_refresh_index();
-
-		$args = array(
-			's'         => 'findme',
-			'post_status' => array(
-				'draft',
-				'publish',
-			),
-		);
-
-		$query = new WP_Query( $args );
-
-		$this->assertEquals( 1, $query->post_count );
-		$this->assertEquals( 1, $query->found_posts );
-	}
-
-	/**
 	 * Test a post status query for published or draft posts with 'draft' whitelisted as indexable status
 	 *
 	 * @since 2.1
@@ -1103,56 +1045,6 @@ class EPTestSingleSite extends EP_Test_Base {
 
 		$this->assertEquals( 3, $query->post_count );
 		$this->assertEquals( 3, $query->found_posts );
-
-		remove_filter( 'ep_indexable_post_status', array( $this, 'mock_indexable_post_status' ), 10);
-	}
-
-	/**
-	 * Test a query with no post status without 'draft' indexable status. Post status should default to publish.
-	 *
-	 * @since 2.1
-	 */
-	public function testNoPostStatusSearchQueryDefault() {
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 1', 'post_status' => 'draft' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 2' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 3', 'post_status' => 'draft' ) );
-
-		ep_refresh_index();
-
-		// post_status defaults to "publish"
-		$args = array(
-			's' => 'findme',
-		);
-
-		$query = new WP_Query( $args );
-
-		$this->assertEquals( 1, $query->post_count );
-		$this->assertEquals( 1, $query->found_posts );
-	}
-
-	/**
-	 * Test a query with no post status with 'draft' as indexable status. Post status should default to publish
-	 *
-	 * @since 2.1
-	 */
-	public function testNoPostStatusSearchQuery() {
-		add_filter( 'ep_indexable_post_status', array( $this, 'mock_indexable_post_status' ), 10, 1 );
-
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 1', 'post_status' => 'draft' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 2' ) );
-		ep_create_and_sync_post( array( 'post_content' => 'findme test 3', 'post_status' => 'draft' ) );
-
-		ep_refresh_index();
-
-		// post_status defaults to "publish"
-		$args = array(
-			's' => 'findme',
-		);
-
-		$query = new WP_Query( $args );
-
-		$this->assertEquals( 1, $query->post_count );
-		$this->assertEquals( 1, $query->found_posts );
 
 		remove_filter( 'ep_indexable_post_status', array( $this, 'mock_indexable_post_status' ), 10);
 	}
@@ -1259,33 +1151,11 @@ class EPTestSingleSite extends EP_Test_Base {
 	}
 
 	/**
-	 * Test meta mapping for complex arrays. All complex arrays are serialized
+	 * Test meta shows up in EP post object
 	 *
 	 * @since 1.7
 	 */
-	public function testSearchMetaMappingComplexArray() {
-		ep_create_and_sync_post( array( 'post_content' => 'post content' ), array( 'test_key' => array( 'test' ) ) );
-
-		ep_refresh_index();
-		$args = array(
-			'ep_integrate' => true,
-		);
-
-		$query = new WP_Query( $args );
-
-		$this->assertEquals( 1, $query->post_count );
-
-		$this->assertEquals( 1, count( $query->posts[0]->post_meta['test_key'] ) ); // Make sure there is only one value
-
-		$this->assertTrue( is_array( unserialize( $query->posts[0]->post_meta['test_key'][0] ) ) ); // Make sure value is properly serialized
-	}
-
-	/**
-	 * Test meta mapping for complex objects. All complex objects are serialized
-	 *
-	 * @since 1.7
-	 */
-	public function testSearchMetaMappingComplexObject() {
+	public function testSearchMetaInPostObject() {
 		$object = new stdClass();
 		$object->test = 'hello';
 
@@ -1300,31 +1170,7 @@ class EPTestSingleSite extends EP_Test_Base {
 
 		$this->assertEquals( 1, $query->post_count );
 
-		$this->assertEquals( 1, count( $query->posts[0]->post_meta['test_key'] ) ); // Make sure there is only one value
-
-		$this->assertEquals( 'hello', unserialize( $query->posts[0]->post_meta['test_key'][0] )->test ); // Make sure value is properly serialized
-	}
-
-	/**
-	 * Test meta mapping for simple string
-	 *
-	 * @since 1.7
-	 */
-	public function testSearchMetaMappingString() {
-		ep_create_and_sync_post( array( 'post_content' => 'post content' ), array( 'test_key' => 'test' ) );
-
-		ep_refresh_index();
-		$args = array(
-			'ep_integrate' => true,
-		);
-
-		$query = new WP_Query( $args );
-
-		$this->assertEquals( 1, $query->post_count );
-
-		$this->assertEquals( 1, count( $query->posts[0]->post_meta['test_key'] ) ); // Make sure there is only one value
-
-		$this->assertEquals( 'test', $query->posts[0]->post_meta['test_key'][0] );
+		$this->assertEquals( 1, count( $query->posts[0]->meta['test_key'] ) );
 	}
 
 	/**
@@ -1568,15 +1414,14 @@ class EPTestSingleSite extends EP_Test_Base {
 	 */
 	public function testSearchPostMetaStringOrderbyQueryAdvanced() {
 		ep_create_and_sync_post( array( 'post_title' => 'ordertest 333' ), array( 'test_key' => 'c', 'test_key2' => 'c' ) );
-		ep_create_and_sync_post( array( 'post_title' => 'Ordertest 222' ), array( 'test_key' => 'd', 'test_key2' => 'c' ) );
+		ep_create_and_sync_post( array( 'post_title' => 'ordertest 222' ), array( 'test_key' => 'f', 'test_key2' => 'c' ) );
 		ep_create_and_sync_post( array( 'post_title' => 'ordertest 111' ), array( 'test_key' => 'd', 'test_key2' => 'd' ) );
 
 		ep_refresh_index();
 
 		$args = array(
 			's'       => 'ordertest',
-			'orderby' => array( 'meta.test_key.value.sortable' => 'asc', 'meta.test_key.value.sortable' => 'desc' ),
-			'order'   => 'ASC',
+			'orderby' => array( 'meta.test_key.value.sortable' => 'asc', ),
 		);
 
 		$query = new WP_Query( $args );
@@ -1584,7 +1429,7 @@ class EPTestSingleSite extends EP_Test_Base {
 		$this->assertEquals( 3, $query->post_count );
 		$this->assertEquals( 3, $query->found_posts );
 		$this->assertEquals( 'ordertest 333', $query->posts[0]->post_title );
-		$this->assertEquals( 'Ordertest 111', $query->posts[1]->post_title );
+		$this->assertEquals( 'ordertest 111', $query->posts[1]->post_title );
 		$this->assertEquals( 'ordertest 222', $query->posts[2]->post_title );
 	}
 
@@ -2012,40 +1857,6 @@ class EPTestSingleSite extends EP_Test_Base {
 		*/
 		$this->assertEquals( 3, $query->post_count );
 		$this->assertEquals( 3, $query->found_posts );
-	}
-
-	/**
-	 * Test a normal post trash
-	 *
-	 * @since 1.2
-	 */
-	public function testPostDelete() {
-		add_action( 'ep_delete_post', array( $this, 'action_delete_post' ), 10, 0 );
-		$post_id = ep_create_and_sync_post();
-
-		ep_refresh_index();
-
-		$post = ep_get_post( $post_id );
-
-		// Ensure that our post made it over to elasticsearch
-		$this->assertTrue( ! empty( $post ) );
-
-		// Let's normally trash the post
-		wp_delete_post( $post_id );
-
-		ep_refresh_index();
-
-		$this->assertTrue( ! empty( $this->fired_actions['ep_delete_post'] ) );
-
-		$post = ep_get_post( $post_id );
-
-		// The post, although it still should exist in WP's trash, should not be in our index
-		$this->assertTrue( empty( $post ) );
-
-		$post = get_post( $post_id );
-		$this->assertTrue( ! empty( $post ) );
-
-		$this->fired_actions = array();
 	}
 
 	/**
